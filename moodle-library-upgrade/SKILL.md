@@ -128,7 +128,19 @@ If the readme's description of a patch's location or mechanism doesn't match wha
 
 ### Step 4.4 — Run Build Steps
 
-Run any build commands the readme specifies (e.g. grunt, npm run build). If the required tooling isn't available in this environment, note (non-blocking) that this step is unverified/incomplete and carry it into your final summary — don't silently skip it, but don't block on it either.
+First run:
+```bash
+nvm use
+```
+to switch to the Node version this Moodle checkout supports, before running any other build command.
+
+Then run any build commands the readme specifies (e.g. grunt, npm run build). If the replaced/added files include anything under an `amd/src` directory (i.e. the library ships or touches AMD modules), also run:
+```bash
+grunt amd
+```
+to compile them to `amd/build`, even if the readme doesn't mention it.
+
+If the required tooling isn't available in this environment, note (non-blocking) that this step is unverified/incomplete and carry it into your final summary — don't silently skip it, but don't block on it either.
 
 ### Step 4.5 — Check for License Changes
 
@@ -203,6 +215,8 @@ For each Moodle version confirmed as affected in Step 6.2 that hasn't been patch
 ### Step 6.7 — Apply the Security Fix Only
 
 In that checkout, cherry-pick the upstream security-fix commit(s) if they apply cleanly, or manually apply just the security fix — do not upgrade the whole library on this branch; it stays on its existing library version otherwise. Show the diff before writing anything, same as Steps 4.2/4.3.
+
+If the fix touches anything under `amd/src`, run `nvm use` followed by `grunt amd` in that checkout before committing, same as Step 4.4.
 
 ### Step 6.8 — Commit and Push the Patch
 
