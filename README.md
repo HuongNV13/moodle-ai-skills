@@ -16,6 +16,12 @@ Guides upgrading a vendored third-party library in a Moodle codebase end-to-end:
 
 Run it from the root of a Moodle checkout (a directory containing `thirdpartylibs.xml`), and invoke it with `/moodle-library-upgrade` or by asking to upgrade/bump a specific library.
 
+## Requirements
+
+- **Atlassian MCP** connected and authorized — used for Jira status transitions, updating testing instructions, and adding labels
+- **[Moodle Development Kit (mdk)](https://github.com/fmcorz/mdk)** installed
+- **Git** installed
+
 ## Installation
 
 Copy the skill folder into your Claude Code skills directory (e.g. `~/.claude/skills/`), or clone this repo there directly.
