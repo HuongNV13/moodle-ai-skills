@@ -4,10 +4,14 @@ description: >
   Guides upgrading a vendored third-party library in a Moodle codebase end-to-end:
   locates it in thirdpartylibs.xml by shortname or fullname, confirms the match,
   reads its readme_moodle file for upgrade steps, fetches the latest upstream
-  release, checks the changelog for security fixes, reapplies Moodle-specific
-  patches, updates thirdpartylibs.xml, and commits on an MDL branch. Use when
-  user says "upgrade library", "update third party library", "bump <library>",
-  or invokes /moodle-library-upgrade.
+  release, classifies the bump (semver) and checks for breaking changes on major
+  bumps, checks the changelog for security fixes, reapplies Moodle-specific
+  patches, updates thirdpartylibs.xml, and commits on an MDL branch. When the
+  upgrade is security-relevant, walks through Moodle's security process: Jira
+  issue type/security level via the Atlassian MCP, determining affected Moodle
+  versions, and backporting fix-only patches per branch with `mdk push -t`. Use
+  when user says "upgrade library", "update third party library", "bump
+  <library>", or invokes /moodle-library-upgrade.
 ---
 
 # Moodle Library Upgrade Skill
@@ -86,16 +90,20 @@ From the readme, note:
 
 Research the target version and its security relevance together — don't lock in a version before you know what it fixes.
 
-### Step 3.1 — Determine the Latest Upstream Version and Check for Security Fixes
+### Step 3.1 — Determine the Latest Upstream Version, Bump Type, and Security Relevance
 
-Use the upstream URL from the readme (or WebSearch/WebFetch) to find the latest stable release. In the same research pass, fetch release notes/changelog between the current and latest version (releases page or CHANGELOG) and check for known CVEs affecting the current version. Scan for security-relevant language (security, CVE, vulnerability, XSS, injection, RCE, sanitiz*, bypass, etc.).
+Use the upstream URL from the readme (or WebSearch/WebFetch) to find the latest stable release. Compare the current version against the latest using semantic versioning (major.minor.patch) and classify the bump as **major**, **minor**, or **patch**.
+
+In the same research pass, fetch release notes/changelog between the current and latest version (releases page or CHANGELOG) and check for known CVEs affecting the current version. Scan for security-relevant language (security, CVE, vulnerability, XSS, injection, RCE, sanitiz*, bypass, etc.).
+
+If the bump is **major**: also read through the changes between current and latest (changelog, migration guide, "BREAKING CHANGES" sections, upstream issue/PR titles) and identify anything that looks like a breaking change — removed/renamed APIs, changed function signatures, changed defaults, dropped runtime support, etc. Summarize what you find, or explicitly note that nothing broke was identified, for Step 3.2.
 
 ### Step 3.2 — Present Findings & Confirm the Target Version
 
-Present version and security findings together, in one message. If this is a **major version bump**, say so explicitly — don't let it pass as routine. Ask:
-> "Current: [X]. Latest: [Y][ — this is a major version bump]. [Security findings, if any: details/CVEs, and whether the current version is affected/unpatched.] Upgrade to latest, or target a different version? [If security-relevant:] Should this be handled as a routine third-party library bump, or does it need to go through Moodle's security-issue process (restricted tracker visibility) and/or be backported to stable branches?"
+Present version, bump-type, breaking-change, and security findings together, in one message. If this is a **major version bump**, say so explicitly — don't let it pass as routine. Ask:
+> "Current: [X]. Latest: [Y] ([major/minor/patch] bump). [If major:] Breaking changes found: [list, or 'none identified in the changelog — worth a manual look before assuming it's safe']. [Security findings, if any: details/CVEs, and whether the current version is affected/unpatched.] Upgrade to latest, or target a different version? [If security-relevant:] Should this be handled as a routine third-party library bump, or does it need to go through Moodle's security-issue process (restricted tracker visibility, security level, and per-branch backport)?"
 
-Wait for confirmation before downloading or changing anything. Do not decide the security-process question yourself.
+Wait for confirmation before downloading or changing anything. Do not decide the security-process question yourself. Record the answer as `SECURITY_FLOW` (yes/no) — it determines whether Phase 6 runs after the upgrade.
 
 ---
 
@@ -152,6 +160,61 @@ git add <changed files>
 git commit -m "MDL-XXXXX libraries: Upgrade <Library name> to <new version>"
 ```
 Show the commit result to the user.
+
+---
+
+## PHASE 6: Security Process (only if `SECURITY_FLOW` = yes)
+
+Skip this phase entirely for a routine upgrade. If Step 3.2 established that this upgrade addresses a security issue and the user chose to follow Moodle's security process, continue here immediately after Phase 5 finishes for the main/current branch.
+
+### Step 6.1 — Confirm Proceeding with the Security Flow
+
+Note, as part of your normal narration (non-blocking): you're now following Moodle's security process for this upgrade, based on the confirmation given in Step 3.2.
+
+### Step 6.2 — Determine Affected Moodle Versions
+
+Work out which supported Moodle versions/branches ship a library version affected by the security issue — check the recorded `<version>` in `thirdpartylibs.xml` on each supported branch, or ask the user which stable branches to check. List the affected branches explicitly and confirm with the user before continuing:
+> "Based on [what you checked], these Moodle versions look affected: [list]. Does this match your understanding, or are there other branches to check?"
+
+### Step 6.3 — Update the Jira Issue
+
+Using the Atlassian MCP, change the issue type to **Bug** and set its security level. Confirm the exact security level value with the user before applying it, since this varies by tracker configuration:
+> "I'll set the issue type to Bug and the security level to [proposed level]. Confirm, or tell me the correct level to use."
+
+Apply the change only after confirmation.
+
+### Step 6.4 — Full Upgrade for Main
+
+This is Phase 4 + Phase 5, applied to the `main`/current branch — complete it now if it hasn't already run in this session. Only `main` gets the full library upgrade; affected stable branches get a fix-only patch instead (Step 6.7), not a version bump.
+
+### Step 6.5 — Push the Main Patch
+
+Run:
+```bash
+mdk push -t
+```
+to upload the patch for `main`. Show the result to the user.
+
+### Step 6.6 — Get the Root Dir for the Next Affected Version
+
+For each Moodle version confirmed as affected in Step 6.2 that hasn't been patched yet, ask:
+> "What's the root directory of your [version] checkout?"
+
+### Step 6.7 — Apply the Security Fix Only
+
+In that checkout, cherry-pick the upstream security-fix commit(s) if they apply cleanly, or manually apply just the security fix — do not upgrade the whole library on this branch; it stays on its existing library version otherwise. Show the diff before writing anything, same as Steps 4.2/4.3.
+
+### Step 6.8 — Commit and Push the Patch
+
+Commit the fix-only change (using `MDL_NUMBER`) and run:
+```bash
+mdk push -t
+```
+to upload the patch for that version. Show the commit and push result.
+
+### Step 6.9 — Repeat
+
+Go back to Step 6.6 for the next affected version. Repeat until every version listed in Step 6.2 has a patch pushed. Once none remain, summarize all branches patched and stop.
 
 ---
 
