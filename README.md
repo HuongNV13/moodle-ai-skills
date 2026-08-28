@@ -22,6 +22,7 @@ Run it from the root of a Moodle checkout (a directory containing `thirdpartylib
 
 - **Atlassian MCP** connected and authorized — used for Jira status transitions, updating testing instructions, and adding labels
 - **[Moodle Development Kit (mdk)](https://github.com/fmcorz/mdk)** installed
+- **[nvm](https://github.com/nvm-sh/nvm)** installed
 - **Git** installed
 
 ## Installation
