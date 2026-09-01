@@ -23,9 +23,9 @@ Two kinds of instructions appear below, and they mean different things:
 - **"Ask:" with a quoted question - a blocking checkpoint.** Stop, ask exactly that, and wait for an explicit answer before doing anything else in that step.
 - **"Note/flag/disclose" - non-blocking.** Say it as part of your normal narration (or carry it into the final summary) and keep going; it is not a stop-and-wait point.
 
-## Required: Run From a Moodle Checkout
+## Required: Run From a Moodle Codebase
 
-This skill assumes the current working directory is a Moodle codebase root (it contains `thirdpartylibs.xml`). If `thirdpartylibs.xml` is not found in the current directory, stop and ask the user for the correct path or to `cd` into the right checkout - do not search elsewhere on disk.
+This skill assumes the current working directory is a Moodle codebase, or a subdirectory of one - not necessarily the location of the relevant `thirdpartylibs.xml` itself. Moodle vendors third-party libraries both at the codebase root and inside individual component directories (`mod/*`, `blocks/*`, `admin/tool/*`, `filter/*`, etc.), each carrying its own `thirdpartylibs.xml`. If no `thirdpartylibs.xml` file exists anywhere under the current directory, stop and ask the user for the correct path or to `cd` into the right checkout - do not search elsewhere on disk.
 
 ---
 
@@ -36,20 +36,22 @@ This skill assumes the current working directory is a Moodle codebase root (it c
 If not already given, ask:
 > "Which library do you want to upgrade? (shortname, fullname, or folder name is fine)"
 
-### Step 1.2 - Read thirdpartylibs.xml
+### Step 1.2 - Find All thirdpartylibs.xml Files
 
-Read `thirdpartylibs.xml` in the current directory. Parse all `<library>` entries (`<name>`, `<location>`, `<license>`, `<licenseversion>`, `<version>`, `<version_comment>`).
+Search the codebase for every `thirdpartylibs.xml` file (e.g. `find . -name thirdpartylibs.xml`, or a recursive grep), not just one at the current directory. Parse all `<library>` entries (`<name>`, `<location>`, `<license>`, `<licenseversion>`, `<version>`, `<version_comment>`) from each file found, keeping track of which file each entry came from.
 
 ### Step 1.3 - Match
 
-Match the given name against `<name>` and the last path segment of `<location>`, case-insensitively, allowing partial/fuzzy matches.
+Match the given name against `<name>` and the last path segment of `<location>`, case-insensitively, allowing partial/fuzzy matches, across every `thirdpartylibs.xml` file found in Step 1.2.
 
-- **No match:** show the closest candidates (if any) and ask the user to clarify or provide the exact name.
-- **Multiple matches:** list them all (name, location, current version) and ask the user to pick one.
-- **One match:** show it - name, location, current version, license - and ask explicitly:
-  > "Is this the library you want to upgrade? [name] at [location], currently version [version]."
+- **No match anywhere:** show the closest candidates (if any) and ask the user to clarify or provide the exact name.
+- **Multiple matches** (the library is vendored in more than one component, or several distinct libraries match the name): list them all - file path, name, location, current version - and ask the user to pick one.
+- **One match:** show it - which `thirdpartylibs.xml` it came from, name, location, current version, license - and ask explicitly:
+  > "Is this the library you want to upgrade? [name] at [location], currently version [version], recorded in [path/to/thirdpartylibs.xml]."
 
 Do not proceed past this step without an explicit yes.
+
+Once confirmed, record the matched file's path as `THIRDPARTYLIBS_FILE` - every later step that reads or writes "thirdpartylibs.xml" (notably Step 5.1) means this specific file, which may live inside a component directory rather than at the codebase root. Operate from that component directory for locating and inspecting the library's own folder (Step 1.4 onward), but keep git operations (branch, add, commit) rooted at the actual git repository root, wherever that is relative to `THIRDPARTYLIBS_FILE`.
 
 ### Step 1.4 - Resolve the Path & Sanity-Check It
 
@@ -153,7 +155,7 @@ If the user authorizes the update inline, proceed and write it in Step 5.1. If t
 
 ### Step 5.1 - Update thirdpartylibs.xml
 
-Update `<version>` (and `<version_comment>`/license fields if changed in Step 4.4) for the matched entry. Show the diff and confirm before writing.
+Update `<version>` (and `<version_comment>`/license fields if changed in Step 4.4) for the matched entry in `THIRDPARTYLIBS_FILE` (from Step 1.3) - not necessarily the one at the codebase root. Show the diff and confirm before writing.
 
 ### Step 5.2 - Branch & Commit the Base Upgrade
 
