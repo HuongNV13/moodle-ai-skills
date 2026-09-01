@@ -107,7 +107,7 @@ Regardless of bump type, also scan the same sources for **deprecations** - APIs 
 
 Skip this step entirely if Step 3.1 found nothing security-relevant - go straight to Step 3.3.
 
-Before asking the user whether to treat this as routine or run it through Moodle's security process, first find out whether that question even applies. For each supported Moodle stable branch (ask the user which branches to check if you can't enumerate them yourself, e.g. via separate local checkouts or `mdk`), check the recorded `<version>` in that branch's `thirdpartylibs.xml` and compare it against the version that introduced the fix. Report what you find to the user as part of your normal narration (non-blocking):
+Before asking the user whether to treat this as routine or run it through Moodle's security process, first find out whether that question even applies. For each supported Moodle stable branch, locate its checkout - try to determine the path yourself first (e.g. sibling directories, `mdk` config/`mdk info`, or other local conventions you can detect); only if you can't determine it, ask the user for that branch's codebase path. Once located, check the recorded `<version>` in that branch's `thirdpartylibs.xml` and compare it against the version that introduced the fix. Report what you find to the user as part of your normal narration (non-blocking):
 > "Checked stable branches for the affected version: [branch: version, affected? - for each branch checked]."
 
 - **No stable branch is running an affected version:** report this plainly and proceed with a routine bump - do not ask the routine-vs-security question in Step 3.3. Set `SECURITY_FLOW` = no now.
