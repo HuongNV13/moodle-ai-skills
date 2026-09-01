@@ -99,16 +99,26 @@ Use the upstream URL from the readme (or WebSearch/WebFetch) to find the latest 
 
 In the same research pass, fetch release notes/changelog between the current and latest version (releases page or CHANGELOG) and check for known CVEs affecting the current version. Scan for security-relevant language (security, CVE, vulnerability, XSS, injection, RCE, sanitiz*, bypass, etc.).
 
-If the bump is **major**: also read through the changes between current and latest (changelog, migration guide, "BREAKING CHANGES" sections, upstream issue/PR titles) and identify anything that looks like a breaking change - removed/renamed APIs, changed function signatures, changed defaults, dropped runtime support, etc. Summarize what you find, or explicitly note that nothing broke was identified, for Step 3.2.
+If the bump is **major**: also read through the changes between current and latest (changelog, migration guide, "BREAKING CHANGES" sections, upstream issue/PR titles) and identify anything that looks like a breaking change - removed/renamed APIs, changed function signatures, changed defaults, dropped runtime support, etc. Summarize what you find, or explicitly note that nothing broke was identified, for Step 3.3.
 
-Regardless of bump type, also scan the same sources for **deprecations** - APIs marked deprecated, soon-to-be-removed, or superseded by a new equivalent. Deprecations commonly land in minor bumps ahead of a later major removal, so don't skip this check just because the bump is minor or patch. Summarize what you find, or note that nothing deprecated was identified, for Step 3.2.
+Regardless of bump type, also scan the same sources for **deprecations** - APIs marked deprecated, soon-to-be-removed, or superseded by a new equivalent. Deprecations commonly land in minor bumps ahead of a later major removal, so don't skip this check just because the bump is minor or patch. Summarize what you find, or note that nothing deprecated was identified, for Step 3.3.
 
-### Step 3.2 - Present Findings & Confirm the Target Version
+### Step 3.2 - Check Affected Stable Branches (only if Step 3.1 found security-relevant findings)
+
+Skip this step entirely if Step 3.1 found nothing security-relevant - go straight to Step 3.3.
+
+Before asking the user whether to treat this as routine or run it through Moodle's security process, first find out whether that question even applies. For each supported Moodle stable branch (ask the user which branches to check if you can't enumerate them yourself, e.g. via separate local checkouts or `mdk`), check the recorded `<version>` in that branch's `thirdpartylibs.xml` and compare it against the version that introduced the fix. Report what you find to the user as part of your normal narration (non-blocking):
+> "Checked stable branches for the affected version: [branch: version, affected? - for each branch checked]."
+
+- **No stable branch is running an affected version:** report this plainly and proceed with a routine bump - do not ask the routine-vs-security question in Step 3.3. Set `SECURITY_FLOW` = no now.
+- **At least one stable branch is running an affected version:** carry that list of affected branches into Step 3.3 so the user decides with it already in hand, and so Step 8.2 doesn't need to redo this work.
+
+### Step 3.3 - Present Findings & Confirm the Target Version
 
 Present version, bump-type, breaking-change, deprecation, and security findings together, in one message. If this is a **major version bump**, say so explicitly - don't let it pass as routine. Ask:
-> "Current: [X]. Latest: [Y] ([major/minor/patch] bump). [If major:] Breaking changes found: [list, or 'none identified in the changelog - worth a manual look before assuming it's safe']. Deprecations found: [list, or 'none identified']. [Security findings, if any: details/CVEs, and whether the current version is affected/unpatched.] Upgrade to latest, or target a different version? [If security-relevant:] Should this be handled as a routine third-party library bump, or does it need to go through Moodle's security-issue process (restricted tracker visibility, security level, and per-branch backport)?"
+> "Current: [X]. Latest: [Y] ([major/minor/patch] bump). [If major:] Breaking changes found: [list, or 'none identified in the changelog - worth a manual look before assuming it's safe']. Deprecations found: [list, or 'none identified']. [Security findings, if any: details/CVEs, whether the current version is affected/unpatched, and the affected-stable-branches result from Step 3.2.] Upgrade to latest, or target a different version? [If security-relevant AND Step 3.2 found at least one affected stable branch:] Should this be handled as a routine third-party library bump, or does it need to go through Moodle's security-issue process (restricted tracker visibility, security level, and per-branch backport)?"
 
-Wait for confirmation before downloading or changing anything. Do not decide the security-process question yourself. Record the answer as `SECURITY_FLOW` (yes/no) - it determines whether Phase 8 runs after the upgrade. Also record whether any breaking changes or deprecations were found as `API_CHANGES` (yes/no) - it determines whether Phase 7 runs.
+Wait for confirmation before downloading or changing anything. Do not decide the security-process question yourself. If Step 3.2 already set `SECURITY_FLOW` = no (no stable branch affected), don't re-ask the routine-vs-security question here - just confirm the version and proceed as routine. Otherwise record the answer as `SECURITY_FLOW` (yes/no) - it determines whether Phase 8 runs after the upgrade. Also record whether any breaking changes or deprecations were found as `API_CHANGES` (yes/no) - it determines whether Phase 7 runs.
 
 ---
 
@@ -241,16 +251,16 @@ Show the commit result to the user. Keep this commit separate from the Phase 5/6
 
 ## PHASE 8: Security Process (only if `SECURITY_FLOW` = yes)
 
-Skip this phase entirely for a routine upgrade. If Step 3.2 established that this upgrade addresses a security issue and the user chose to follow Moodle's security process, continue here immediately after Phase 5, Phase 6 (if this library has custom patches), and Phase 7 (if there were breaking-change/deprecation caller updates) finish for the main/current branch.
+Skip this phase entirely for a routine upgrade. If Step 3.3 established that this upgrade addresses a security issue and the user chose to follow Moodle's security process, continue here immediately after Phase 5, Phase 6 (if this library has custom patches), and Phase 7 (if there were breaking-change/deprecation caller updates) finish for the main/current branch.
 
 ### Step 8.1 - Confirm Proceeding with the Security Flow
 
-Note, as part of your normal narration (non-blocking): you're now following Moodle's security process for this upgrade, based on the confirmation given in Step 3.2.
+Note, as part of your normal narration (non-blocking): you're now following Moodle's security process for this upgrade, based on the confirmation given in Step 3.3.
 
-### Step 8.2 - Determine Affected Moodle Versions
+### Step 8.2 - Reconfirm Affected Moodle Versions
 
-Work out which supported Moodle versions/branches ship a library version affected by the security issue - check the recorded `<version>` in `thirdpartylibs.xml` on each supported branch, or ask the user which stable branches to check. List the affected branches explicitly and confirm with the user before continuing:
-> "Based on [what you checked], these Moodle versions look affected: [list]. Does this match your understanding, or are there other branches to check?"
+Reuse the affected-branch list from Step 3.2 as your starting point - don't re-derive it from scratch. Confirm it's still accurate before continuing (time may have passed since Step 3.2 ran earlier in this session):
+> "Based on the earlier check, these Moodle versions look affected: [list from Step 3.2]. Does this still match, or are there other branches to check?"
 
 ### Step 8.3 - Update the Jira Issue
 
