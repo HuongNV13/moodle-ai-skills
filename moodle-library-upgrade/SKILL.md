@@ -10,9 +10,12 @@ description: >
   call sites broken or deprecated by the new version. When security-relevant,
   walks through Moodle's security process: Jira issue type/security level,
   affected Moodle versions, and per-branch backport with `mdk push -t`
-  (cherry-pick, manual patch, or minor-version fallback on stable branches). Use
-  when user says "upgrade library", "update third party library", "bump
-  <library>", or invokes /moodle-library-upgrade.
+  (cherry-pick, manual patch, or minor-version fallback on stable branches). On
+  Moodle 5.2+, keeps composer.json/composer.lock in sync for vanilla libraries,
+  or removes the composer.json record and marks thirdpartylibs.xml with
+  <customised/> once a library carries Moodle-specific or security-backport
+  patches. Use when user says "upgrade library", "update third party library",
+  "bump <library>", or invokes /moodle-library-upgrade.
 ---
 
 # Moodle Library Upgrade Skill
@@ -70,6 +73,10 @@ Ask:
 
 Store it as `MDL_NUMBER` for the rest of this session - you'll need it for commit messages, patch comments, and any readme notes in later phases. Do not proceed to any file edit without one, and never invent one.
 
+### Step 1.6 - Determine the Moodle Version
+
+Read the `$branch` variable from `version.php` at the git repository root (a 3-digit string, e.g. `'502'` for Moodle 5.2 - the repo root may not be the same directory as `THIRDPARTYLIBS_FILE`). Record whether this checkout is **Moodle 5.2 or later** (`$branch >= '502'`) as `COMPOSER_ELIGIBLE`. This gates every composer.json step later in this skill (Steps 2.3, 5.1a, and the non-vanilla bookkeeping in Phase 6 and Step 8.7). Re-derive it for each stable-branch checkout visited in Phase 8 (Step 8.6) - each branch has its own `version.php` and may sit on either side of the 5.2 line.
+
 ---
 
 ## PHASE 2: Read the Upgrade Instructions
@@ -86,6 +93,20 @@ From the readme, note:
 - Upstream project URL/repo
 - Documented upgrade procedure (download/replace steps, build commands)
 - Any "Moodle changes" / custom patch section - record what each patch does and exactly where the readme says it lives in the file. You'll need this to verify the patch still applies correctly after upgrading (Step 6.1).
+
+If the readme documents an existing "Moodle changes" / custom patch section, this library already carries Moodle-specific patches, and Phase 6 will run later this session to reapply them - note this now as `MAIN_HAS_PATCHES` = yes, since it changes how Step 5.1a and Step 2.3 below are handled. Otherwise `MAIN_HAS_PATCHES` = no.
+
+### Step 2.3 - Check for a composer.json Record
+
+Skip this step, and note (non-blocking) why, if `COMPOSER_ELIGIBLE` (Step 1.6) is no - composer.json isn't touched on Moodle versions before 5.2.
+
+Otherwise, look for `composer.json` at the git repository root. If it doesn't exist, note there's nothing to do here and move on. If it exists, search its `require` and `require-dev` sections for a package whose name fuzzy-matches the library's shortname or folder name (same style as the thirdpartylibs.xml matching in Step 1.3).
+
+- **No match:** note there's no composer.json record for this library and move on.
+- **Match found:** show it - package name and current version constraint - and ask:
+  > "Found [package/name]: [version] in composer.json. Is this the same library?"
+
+  Wait for confirmation. Once confirmed, record it as `COMPOSER_PACKAGE` (package name + file path) for use in Phase 5/6/8.
 
 ---
 
@@ -167,6 +188,16 @@ If the user authorizes the update inline, proceed and write it in Step 5.1. If t
 
 Update `<version>` (and `<version_comment>`/license fields if changed in Step 4.4) for the matched entry in `THIRDPARTYLIBS_FILE` (from Step 1.3) - not necessarily the one at the codebase root. Show the diff and confirm before writing.
 
+### Step 5.1a - Update composer.json (if applicable)
+
+Skip this step if Step 2.3 didn't record a `COMPOSER_PACKAGE`, or if `MAIN_HAS_PATCHES` (Step 2.2) is yes - a library getting Moodle-specific patches reapplied in Phase 6 isn't staying vanilla, so its composer.json bookkeeping happens there instead (Step 6.3), not here.
+
+Otherwise, update `COMPOSER_PACKAGE`'s version constraint in composer.json to match the new version, show the diff, and confirm before writing. Then run:
+```bash
+composer update <package/name>
+```
+using the matched package name, to regenerate composer.lock. Include both files in the Step 5.2 commit.
+
 ### Step 5.2 - Branch & Commit the Base Upgrade
 
 Check whether the current directory is a real git repository (`git status`). If it isn't, report the commands that *would* run and stop - do not fabricate a branch or commit result.
@@ -200,13 +231,31 @@ If the readme's description of a patch's location or mechanism doesn't match wha
 
 If any patched file is under an `amd/src` directory, run `nvm use` followed by `grunt amd`, same as Step 4.3 - even if the base upgrade didn't need a rebuild.
 
-### Step 6.3 - Update readme_moodle
+### Step 6.3 - Remove the composer.json Record (if applicable)
 
-If the patch descriptions (or anything else) in the readme are now stale given how you reapplied them, propose an update to it and confirm with the user before writing.
+Skip this step if Step 2.3 didn't record a `COMPOSER_PACKAGE` - there's nothing to remove.
 
-### Step 6.4 - Commit the Moodle-Specific Changes
+Otherwise, remove `COMPOSER_PACKAGE`'s entry from composer.json's `require`/`require-dev` section, show the diff, and confirm before writing. Then run:
+```bash
+composer update <package/name>
+```
+using the matched package name, so composer.lock drops it too. A library carrying Moodle-specific patches isn't managed by composer any more - Step 6.4 records why, so a future upgrade knows to re-add it if the patches are ever dropped.
 
-Show a diff of the reapplied patches (and any readme/build updates from Steps 6.2–6.3) and confirm before committing. Then run (using `MDL_NUMBER` from Step 1.5):
+### Step 6.4 - Update readme_moodle to Document the Customization
+
+Update the readme_moodle file to describe the Moodle customization applied in Step 6.1 - what changed and why, using the reapplied patch description. If the existing patch descriptions were already accurate, this may be a small addition rather than a rewrite; if they were stale, bring them in line with what you actually reapplied.
+
+If Step 6.3 removed a `COMPOSER_PACKAGE`, note that removal here too - e.g. "Previously required via composer as [package/name] [version]; removed from composer.json because this library now carries Moodle-specific patches - re-add it if the patches are ever dropped." This is how a future upgrade knows to restore the composer.json entry once the library goes vanilla again.
+
+Propose the update and confirm with the user before writing.
+
+### Step 6.5 - Mark as Customized in thirdpartylibs.xml
+
+Add a `<customised/>` element inside the matched `<library>` entry in `THIRDPARTYLIBS_FILE` (from Step 1.3), if it isn't already there. Show the diff and confirm before writing.
+
+### Step 6.6 - Commit the Moodle-Specific Changes
+
+Show a diff of the reapplied patches and all bookkeeping from Steps 6.2–6.5 (rebuild, composer.json removal, readme_moodle update, `<customised/>` tag) and confirm before committing. Then run (using `MDL_NUMBER` from Step 1.5):
 ```bash
 git add <changed files>
 git commit -m "MDL-XXXXX libraries: Apply Moodle specific changes"
@@ -286,6 +335,8 @@ to upload the patch for `main`. Show the result to the user.
 For each Moodle version confirmed as affected in Step 8.2 that hasn't been patched yet, ask:
 > "What's the root directory of your [version] checkout?"
 
+Once you have that checkout, re-derive `COMPOSER_ELIGIBLE` for it (Step 1.6) and, if eligible, redo the composer.json lookup (Step 2.3) against that checkout's own composer.json - both are branch-specific and don't carry over from `main`.
+
 ### Step 8.7 - Apply the Security Fix Only
 
 In that checkout, the goal is a fix-only patch - do not upgrade the whole library on this branch unless step 3 below is reached and confirmed; it otherwise stays on its existing library version. Try these in order:
@@ -298,6 +349,13 @@ In that checkout, the goal is a fix-only patch - do not upgrade the whole librar
    Only upgrade to that minor version with explicit confirmation, and treat it as a scoped version bump on that branch (replace files, update `thirdpartylibs.xml`'s `<version>`, rebuild if needed) - not a full Phase 4-7 run, and not an upgrade past the minor version that contains the fix.
 
 If the fix (or the fallback minor upgrade) touches anything under `amd/src`, run `nvm use` followed by `grunt amd` in that checkout before committing, same as Step 4.3.
+
+**Composer and thirdpartylibs.xml bookkeeping for this branch:**
+
+- If you used method 1 (cherry-pick) or method 2 (manual patch), this branch's library is a security-patch backport - it's Moodle-customized the same way a Phase 6 patch is, just scoped to this branch. Apply Phase 6's Steps 6.3-6.5 procedures against this branch's own files: remove this branch's `COMPOSER_PACKAGE` from composer.json (if one was found in Step 8.6) and run `composer update <package/name>`, update this branch's readme_moodle to document the backport (and the composer.json removal, if applicable), and add `<customised/>` to this branch's thirdpartylibs.xml entry if it isn't already there.
+- If you used method 3 (fallback minor upgrade), this branch's library is a pristine upstream replacement, same as Phase 5 - if `COMPOSER_ELIGIBLE` and a `COMPOSER_PACKAGE` was found for this branch, update its version and run `composer update <package/name>` the same way as Step 5.1a instead.
+
+Do this before Step 8.8 commits.
 
 ### Step 8.8 - Commit and Push the Patch
 

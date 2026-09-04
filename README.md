@@ -15,6 +15,7 @@ Guides upgrading a vendored third-party library in a Moodle codebase end-to-end:
 - Walks through replacing vendored files, updates `thirdpartylibs.xml`, and commits the base upgrade on an `MDL-XXXXX-main` branch
 - Reapplies any Moodle-specific patches in a separate follow-up commit (`MDL-XXXXX libraries: Apply Moodle specific changes`), skipped if the library has no custom patches
 - For security-relevant fixes, follows Moodle's security process: sets the Jira issue to Bug with the right security level (via the Atlassian MCP), determines which Moodle versions are affected, and backports a fix-only patch per affected branch with `mdk push -t`
+- On Moodle 5.2+, keeps a library's `composer.json`/`composer.lock` entry in sync with the version bump while it stays vanilla, or removes the entry and marks it in `readme_moodle` (for re-adding later) once the library carries Moodle-specific or security-backport patches, adding `<customised/>` to its `thirdpartylibs.xml` entry
 
 Run it from the root of a Moodle checkout (a directory containing `thirdpartylibs.xml`), and invoke it with `/moodle-library-upgrade` or by asking to upgrade/bump a specific library.
 
